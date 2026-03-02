@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>學測級分跨年度換算工具</title>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --bg-color: #f8fafc;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg-color); color: #334155; padding: 20px; }
+        .container { max-width: 700px; margin: 40px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        h1 { font-size: 1.5rem; color: var(--primary-color); text-align: center; margin-bottom: 24px; }
+        
+        .setup-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; background: #f1f5f9; padding: 15px; border-radius: 8px; }
+        .input-group { margin-bottom: 15px; }
+        label { display: block; font-weight: 600; margin-bottom: 5px; font-size: 0.9rem; }
+        select, input { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+        
+        .subject-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 20px; }
+        
+        button { width: 100%; padding: 12px; background-color: var(--primary-color); color: white; border: none; border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+        button:hover { background-color: #1d4ed8; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 30px; overflow: hidden; border-radius: 8px; }
+        th, td { padding: 12px; text-align: center; border-bottom: 1px solid #e2e8f0; }
+        th { background-color: #f1f5f9; font-weight: 600; }
+        .total-row { background-color: #eff6ff; font-weight: bold; color: var(--primary-color); }
+        .loading { text-align: center; color: #64748b; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>學測級分換算工具 (百分位對應法)</h1>
+    
+    <div id="loading" class="loading">正在載入級分資料...</div>
+    
+    <div id="main-ui" style="display: none;">
+        <div class="setup-section">
+            <div class="input-group">
+                <label>來源年份 (你的成績)</label>
+                <select id="sourceYear"></select>
+            </div>
+            <div class="input-group">
+                <label>目標年份 (欲轉換年份)</label>
+                <select id="targetYear"></select>
+            </div>
+        </div>
+
+        <div id="subjectInputs" class="subject-grid">
+            </div>
+
+        <button onclick="calculate()">立即計算換算結果</button>
+
+        <table id="resultTable" style="display:none;">
+            <thead>
+                <tr>
+                    <th>項目</th>
+                    <th>原始級分</th>
+                    <th>預估級分</th>
+                </tr>
+            </thead>
+            <tbody id="resultBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let gradeData = null;
+
+    // 1. Fetch 異步載入資料
+    async function init() {
+        try {
+            // 在 GitHub Pages 上，這會讀取同資料夾的 data.json
+            const response = await fetch('Data.json');
+            if (!response.ok) throw new Error('Network response was not ok');
+            gradeData = await response.json();
+
+            setupUI();
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('main-ui').style.display = 'block';
+        } catch (error) {
+            document.getElementById('loading').innerHTML = '❌ 資料載入失敗，請確認 data.json 格式與路徑。';
+            console.error('Fetch error:', error);
+        }
+    }
+
+    // 2. 初始化 UI 元件
+    function setupUI() {
+        const years = Object.keys(gradeData);
+        const sourceSelect = document.getElementById('sourceYear');
+        const targetSelect = document.getElementById('targetYear');
+        const subjectDiv = document.getElementById('subjectInputs');
+
+        // 填充年份 (預設選最後兩個年份)
+        years.forEach((year, index) => {
+            const opt = new Option(`民國 ${year} 年`, year);
+            sourceSelect.add(opt.cloneNode(true));
+            targetSelect.add(opt.cloneNode(true));
+        });
+        if(years.length >= 2) {
+            sourceSelect.selectedIndex = years.length - 2;
+            targetSelect.selectedIndex = years.length - 1;
+        }
+
+        // 根據第一個年份的科目產生輸入框
+        const subjects = Object.keys(gradeData[years[0]]);
+        subjects.forEach(sub => {
+            const div = document.createElement('div');
+            div.className = 'input-group';
+            div.innerHTML = `
+                <label>${sub}</label>
+                <input type="number" class="score-input" data-subject="${sub}" min="0" max="15" placeholder="0-15">
+            `;
+            subjectDiv.appendChild(div);
+        });
+    }
+
+    // 3. 換算邏輯 (對應你的 Python 演算法)
+    function calculate() {
+        const sYear = document.getElementById('sourceYear').value;
+        const tYear = document.getElementById('targetYear').value;
+        const inputs = document.querySelectorAll('.score-input');
+        const resultBody = document.getElementById('resultBody');
+        
+        resultBody.innerHTML = '';
+        let sTotal = 0;
+        let tTotal = 0;
+        let hasValue = false;
+
+        inputs.forEach(input => {
+            const subject = input.getAttribute('data-subject');
+            const score = parseInt(input.value);
+
+            if (!isNaN(score) && score >= 0 && score <= 15) {
+                hasValue = true;
+                // 找出原始百分位 (15級分在 index 0)
+                const targetPct = gradeData[sYear][subject][15 - score];
+                
+                // 找目標年份最接近的級分
+                const closest = findClosest(gradeData[tYear][subject], targetPct);
+                
+                sTotal += score;
+                tTotal += closest.grade;
+
+                appendRow(subject, score, closest.grade);
+            }
+        });
+
+        if (hasValue) {
+            appendRow('總計 (2-4科)', sTotal, tTotal, true);
+            document.getElementById('resultTable').style.display = 'table';
+        } else {
+            alert('請至少輸入一科成績');
+        }
+    }
+
+    // 核心演算法：尋找最接近值
+    function findClosest(pctList, target) {
+        return pctList.reduce((prev, curr, index) => {
+            return Math.abs(curr - target) < Math.abs(prev.value - target)
+                ? { grade: 15 - index, value: curr }
+                : prev;
+        }, { grade: 15, value: pctList[0] });
+    }
+
+    function appendRow(label, s, t, isTotal = false) {
+        const row = document.createElement('tr');
+        if (isTotal) row.className = 'total-row';
+        row.innerHTML = `<td>${label}</td><td>${s}</td><td>${t}</td>`;
+        document.getElementById('resultBody').appendChild(row);
+    }
+
+    // 啟動
+    init();
+</script>
+
+</body>
+</html>
