@@ -73,11 +73,10 @@
     // 1. Fetch 異步載入資料
     async function init() {
         try {
-            // 注意檔名大小寫，GitHub Pages 對大小寫很敏感，建議統一用 data.json
-            const response = await fetch('data.json'); 
+            const response = await fetch('Data.json'); 
             if (!response.ok) throw new Error('Network response was not ok');
             gradeData = await response.json();
-
+           
             setupUI();
             document.getElementById('loading').style.display = 'none';
             document.getElementById('main-ui').style.display = 'block';
@@ -105,8 +104,8 @@
             targetSelect.selectedIndex = years.length - 1;
         }
 
-        // 修改這裡：固定只產生這六個科目的輸入框
-        const targetSubjects = ['國文', '英文', '數學A', '數學B', '自然', '社會'];
+        // 固定只產生這六個科目的輸入框
+        const targetSubjects = ['國文', '英文', '數學A', '數學B', '社會', '自然'];
         
         targetSubjects.forEach(sub => {
             const div = document.createElement('div');
@@ -119,7 +118,7 @@
         });
     }
 
-    // 3. 換算邏輯
+// 支援真實組合級分對應的計算邏輯
     function calculate() {
         const sYear = document.getElementById('sourceYear').value;
         const tYear = document.getElementById('targetYear').value;
@@ -127,60 +126,99 @@
         const resultBody = document.getElementById('resultBody');
         
         resultBody.innerHTML = '';
-        let sTotal = 0;
-        let tTotal = 0;
+        
+        const validSubjects = [];
+        const sourceScores = {};
+        const targetScores = {}; // 備案用
         let hasValue = false;
         let hasError = false;
 
+        // 處理單科換算
         inputs.forEach(input => {
             const subject = input.getAttribute('data-subject');
             const score = parseInt(input.value);
 
-            // 確保有填寫數字，且在 0-15 之間
             if (!isNaN(score) && score >= 0 && score <= 15) {
                 hasValue = true;
 
-                // 防呆：確認 JSON 中是否真的有這個年份的這科資料
                 if (!gradeData[sYear][subject] || !gradeData[tYear][subject]) {
                     appendRow(subject, score, '無資料');
                     hasError = true;
-                    return; // 跳過此科目的計算
+                    return; 
                 }
 
-                // 找出原始百分位 (15級分在 index 0)
                 const targetPct = gradeData[sYear][subject][15 - score];
+                // 傳入 15 作為單科的 maxScore
+                const closest = findClosest(gradeData[tYear][subject], targetPct, 15);
                 
-                // 找目標年份最接近的級分
-                const closest = findClosest(gradeData[tYear][subject], targetPct);
-                
-                sTotal += score;
-                tTotal += closest.grade;
+                validSubjects.push(subject);
+                sourceScores[subject] = score;
+                targetScores[subject] = closest.grade;
 
                 appendRow(subject, score, closest.grade);
             }
         });
 
-        if (hasValue) {
-            // 如果遇到沒有資料的科目，總分就不顯示，避免誤導
-            if (hasError) {
-                appendRow('總計', '---', '---', true);
-            } else {
-                appendRow('總計 (所填科目)', sTotal, tTotal, true);
+        // 處理組合級分真實換算
+        if (hasValue && !hasError) {
+            for (let size = 2; size <= 4; size++) {
+                if (validSubjects.length < size) continue;
+
+                const combos = getCombinations(validSubjects, size);
+                combos.forEach(combo => {
+                    let sSum = 0;
+                    combo.forEach(sub => sSum += sourceScores[sub]);
+
+                    // 動態組出 JSON 裡的 Key，例如 "國文+英文"
+                    const comboName = combo.join('、');
+                    const maxScore = size * 15; // 2科30, 3科45, 4科60
+
+                    // 如果你的 JSON 裡面有這個真實組合的數據
+                    if (gradeData[sYear][comboName] && gradeData[tYear][comboName]) {
+                        // 去陣列中抓取對應的真實百分比
+                        const targetPct = gradeData[sYear][comboName][maxScore - sSum];
+                        // 丟去目標年份比對
+                        const closest = findClosest(gradeData[tYear][comboName], targetPct, maxScore);
+                        appendRow(comboName, sSum, closest.grade, true);
+                    } else {
+                        // [防呆備案] 如果 JSON 剛好沒這組資料，用「單科相加」算給他看
+                        let tSum = 0;
+                        combo.forEach(sub => tSum += targetScores[sub]);
+                        appendRow(comboName, sSum, `${tSum} (單科相加)`, true);
+                    }
+                });
             }
             document.getElementById('resultTable').style.display = 'table';
-        } else {
+        } else if (!hasValue) {
             alert('請至少輸入一科成績');
         }
     }
 
-    // 核心演算法：尋找最接近值
-    function findClosest(pctList, target) {
+    function getCombinations(array, size) {
+        const result = [];
+        function p(t, i) {
+            if (t.length === size) {
+                result.push(t);
+                return;
+            }
+            if (i + 1 <= array.length) {
+                p(t.concat(array[i]), i + 1);
+                p(t, i + 1);
+            }
+        }
+        p([], 0);
+        return result;
+    }
+
+
+    function findClosest(pctList, target, maxScore) {
         return pctList.reduce((prev, curr, index) => {
             return Math.abs(curr - target) < Math.abs(prev.value - target)
-                ? { grade: 15 - index, value: curr }
+                ? { grade: maxScore - index, value: curr }
                 : prev;
-        }, { grade: 15, value: pctList[0] });
+        }, { grade: maxScore, value: pctList[0] });
     }
+
 
     function appendRow(label, s, t, isTotal = false) {
         const row = document.createElement('tr');
