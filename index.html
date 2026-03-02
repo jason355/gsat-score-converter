@@ -73,8 +73,8 @@
     // 1. Fetch 異步載入資料
     async function init() {
         try {
-            // 在 GitHub Pages 上，這會讀取同資料夾的 data.json
-            const response = await fetch('Data.json');
+            // 注意檔名大小寫，GitHub Pages 對大小寫很敏感，建議統一用 data.json
+            const response = await fetch('data.json'); 
             if (!response.ok) throw new Error('Network response was not ok');
             gradeData = await response.json();
 
@@ -95,7 +95,7 @@
         const subjectDiv = document.getElementById('subjectInputs');
 
         // 填充年份 (預設選最後兩個年份)
-        years.forEach((year, index) => {
+        years.forEach((year) => {
             const opt = new Option(`民國 ${year} 年`, year);
             sourceSelect.add(opt.cloneNode(true));
             targetSelect.add(opt.cloneNode(true));
@@ -105,9 +105,10 @@
             targetSelect.selectedIndex = years.length - 1;
         }
 
-        // 根據第一個年份的科目產生輸入框
-        const subjects = Object.keys(gradeData[years[0]]);
-        subjects.forEach(sub => {
+        // 修改這裡：固定只產生這六個科目的輸入框
+        const targetSubjects = ['國文', '英文', '數學A', '數學B', '自然', '社會'];
+        
+        targetSubjects.forEach(sub => {
             const div = document.createElement('div');
             div.className = 'input-group';
             div.innerHTML = `
@@ -118,7 +119,7 @@
         });
     }
 
-    // 3. 換算邏輯 (對應你的 Python 演算法)
+    // 3. 換算邏輯
     function calculate() {
         const sYear = document.getElementById('sourceYear').value;
         const tYear = document.getElementById('targetYear').value;
@@ -129,13 +130,23 @@
         let sTotal = 0;
         let tTotal = 0;
         let hasValue = false;
+        let hasError = false;
 
         inputs.forEach(input => {
             const subject = input.getAttribute('data-subject');
             const score = parseInt(input.value);
 
+            // 確保有填寫數字，且在 0-15 之間
             if (!isNaN(score) && score >= 0 && score <= 15) {
                 hasValue = true;
+
+                // 防呆：確認 JSON 中是否真的有這個年份的這科資料
+                if (!gradeData[sYear][subject] || !gradeData[tYear][subject]) {
+                    appendRow(subject, score, '無資料');
+                    hasError = true;
+                    return; // 跳過此科目的計算
+                }
+
                 // 找出原始百分位 (15級分在 index 0)
                 const targetPct = gradeData[sYear][subject][15 - score];
                 
@@ -150,7 +161,12 @@
         });
 
         if (hasValue) {
-            appendRow('總計 (2-4科)', sTotal, tTotal, true);
+            // 如果遇到沒有資料的科目，總分就不顯示，避免誤導
+            if (hasError) {
+                appendRow('總計', '---', '---', true);
+            } else {
+                appendRow('總計 (所填科目)', sTotal, tTotal, true);
+            }
             document.getElementById('resultTable').style.display = 'table';
         } else {
             alert('請至少輸入一科成績');
