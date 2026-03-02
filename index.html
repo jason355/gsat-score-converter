@@ -73,7 +73,7 @@
     // 1. Fetch 異步載入資料
     async function init() {
         try {
-            const response = await fetch('Data.json'); 
+            const response = await fetch('data.json'); 
             if (!response.ok) throw new Error('Network response was not ok');
             gradeData = await response.json();
            
