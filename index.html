@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>學測級分跨年度換算工具</title>
     <style>
+        /* --- 1. 你原本的漂亮 UI 排版 (保留) --- */
         :root {
             --primary-color: #2563eb;
             --bg-color: #f8fafc;
@@ -22,19 +23,208 @@
         
         button { width: 100%; padding: 12px; background-color: var(--primary-color); color: white; border: none; border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
         button:hover { background-color: #1d4ed8; }
-
-        table { width: 100%; border-collapse: collapse; margin-top: 30px; overflow: hidden; border-radius: 8px; }
-        th, td { padding: 12px; text-align: center; border-bottom: 1px solid #e2e8f0; }
-        th { background-color: #f1f5f9; font-weight: 600; }
-        .total-row { background-color: #eff6ff; font-weight: bold; color: var(--primary-color); }
         .loading { text-align: center; color: #64748b; }
+
+        /* 預設隱藏提示 */
+        .landscape-tip { display: none; }
+
+        /* 偵測螢幕小於 768px 且處於直式時顯示 */
+        @media screen and (max-width: 768px) and (orientation: portrait) {
+            .landscape-tip {
+                display: block;
+                background-color: #fffbeb;
+                color: #b45309;
+                padding: 12px;
+                text-align: center;
+                border-radius: 8px;
+                margin-bottom: 20px;
+                border: 1px solid #fcd34d;
+                font-weight: bold;
+                font-size: 0.95rem;
+            }
+        }
+
+
+        /* --- 2. 新增的表格滑動與凍結樣式 --- */
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+            margin-top: 30px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.05);
+            border: 1px solid #e2e8f0;
+            max-height: 600px;
+        }
+
+        #resultTable { 
+            width: 100%; 
+            border-collapse: separate; /* 必須為 separate，sticky 才會生效 */
+            border-spacing: 0;
+            white-space: nowrap; 
+        }
+
+        #resultTable th, #resultTable td { 
+            padding: 12px; 
+            text-align: center; 
+            border-bottom: 1px solid #e2e8f0; 
+        }
+
+        #resultTable th { 
+            background-color: #f1f5f9; 
+            font-weight: 600; 
+        }
+
+        /* 凍結第 1 欄：科目 */
+        #resultTable th:nth-child(1), #resultTable td:nth-child(1) {
+            position: sticky;
+            left: 0;
+            z-index: 10;
+            background-color: #f8fafc;
+            
+            width: 160px;
+            min-width: 160px;
+            max-width: 160px;
+            white-space: normal;
+            word-break: keep-all;
+        }
+
+        /* 凍結第 2 欄：原始成績 */
+        #resultTable th:nth-child(2), #resultTable td:nth-child(2) {
+            position: sticky;
+            left: 160px; /* 配合第一欄的寬度 */
+            z-index: 10;
+            background-color: #f8fafc;
+            border-right: 3px solid #cbd5e1; /* 加上陰影分隔線增加立體感 */
+            
+            width: 100px;
+            max-width: 100px;
+            min-width: 100px;
+
+        }
+
+        /* 1. 讓整排表頭固定在最上方 */
+        #resultTable thead th {
+            position: sticky;
+            top: 0; /* 貼齊頂部 */
+            z-index: 15; /* 層級必須高於會滑動的 tbody 資料列 */
+            background-color: #f1f5f9; /* 必須有底色，不然下面的資料滑上來會重疊顯示 */
+            box-shadow: 0 2px 3px -1px rgba(0,0,0,0.1); /* 底部加點微陰影，讓上下滑動的界線更立體 */
+        }
+
+        /* 2. 左上角交叉點：同時具備 上下固定 + 左右固定，所以層級必須最高 */
+        /* 科目表頭 */
+        #resultTable thead th:nth-child(1) {
+            position: sticky;
+            top: 0;
+            left: 0;
+            z-index: 20; /* 全場最高層級 */
+            background-color: #e2e8f0; /* 稍微深一點的底色區隔 */
+        }
+
+        /* 我的成績表頭 */
+        #resultTable thead th:nth-child(2) {
+            position: sticky;
+            top: 0;
+            left: 160px; /* 這裡記得要對齊下面 tbody 的寬度設定 */
+            z-index: 20; /* 全場最高層級 */
+            background-color: #e2e8f0;
+            border-right: 3px solid #cbd5e1; /* 延續下方格子的右側粗邊框 */
+        }
+
+        /* --- 3. 處理總計列 (Total Row) 的特別樣式 --- */
+        .total-row { 
+            font-weight: bold; 
+            color: var(--primary-color); 
+        }
+        /* 避免總計列的底色被 sticky 蓋掉 */
+        .total-row td { background-color: #eff6ff; }
+        .total-row td:nth-child(1) { background-color: #e2e8f0; } 
+        .total-row td:nth-child(2) { background-color: #eff6ff; }
+
+        /* --- 列印專用樣式 */
+        @media print {
+            /* 1. 隱藏所有不需要印出來的操作介面 */
+            .setup-section, .input-group, button, .landscape-tip, .footer-note, h1 { 
+                display: none !important; 
+            }
+            
+            /* 2. 核心解法：強制把列印時的畫布撐開到電腦版寬度 (約 A4 橫式解析度) */
+            /* 這樣手機瀏覽器就會被迫將整個大表格「縮小塞進」同一頁 PDF 中 */
+            html, body {
+                width: 1100px !important;
+                min-width: 1100px !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: white !important;
+            }
+            
+            /* 3. 重設容器，讓它跟著 body 撐滿 */
+            .container { 
+                width: 100% !important;
+                max-width: 100% !important;
+                padding: 20px !important; 
+                margin: 0 !important; 
+                box-shadow: none !important; 
+                border: none !important;
+            }
+            
+            /* 4. 完全釋放表格容器，禁止任何滾動條或隱藏 */
+            .table-container {
+                width: 100% !important;
+                overflow: visible !important;
+                max-height: none !important;
+                border: none !important;
+                margin-top: 0 !important;
+            }
+            
+            /* 5. 表格本體優化：解除凍結、加上實體黑線、禁止文字換行 */
+            #resultTable {
+                width: 100% !important;
+                border-collapse: collapse !important; /* 列印時改回 collapse 讓框線更完美 */
+            }
+
+            #resultTable th, #resultTable td { 
+                position: static !important; /* 解除左右與上下的 sticky 凍結 */
+                border: 1px solid #333 !important; /* 列印時用深色實線比較清楚 */
+                color: #000 !important; 
+                white-space: nowrap !important; /* 禁止手機自作聰明把文字換行 */
+                padding: 8px !important;
+                font-size: 14px !important; /* 稍微縮小字體讓格子能塞下更多年份 */
+            }
+
+            #resultTable thead th {
+                background-color: #f1f5f9 !important;
+                -webkit-print-color-adjust: exact; /* 強制印出背景色 (Chrome/Safari) */
+                print-color-adjust: exact;
+            }
+
+            /* 6. 在紙張最上方加上正式標題 */
+            .container::before {
+                content: "學測級分跨年度對照表 (依累積百分位換算)";
+                display: block;
+                font-size: 26px;
+                font-weight: bold;
+                text-align: center;
+                margin-bottom: 20px;
+                color: #000;
+            }
+            
+            /* 7. 告訴印表機我們想要橫向 A4 */
+            @page { 
+                size: A4 landscape; 
+                margin: 10mm; /* 留一點紙張白邊 */
+            }
+        }
+
+
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>學測級分換算工具 (百分位對應法)</h1>
-    
+    <h1>學測級分換算工具</h1>
+    <div class="landscape-tip">建議將手機橫放瀏覽，以完整顯示所有年份資料！</div>
+
     <div id="loading" class="loading">正在載入級分資料...</div>
     
     <div id="main-ui" style="display: none;">
@@ -45,25 +235,40 @@
             </div>
             <div class="input-group">
                 <label>目標年份 (欲轉換年份)</label>
-                <select id="targetYear"></select>
+                <select id="targetYear"><option value="all">全年度對照矩陣</option></select>
+                
             </div>
         </div>
 
         <div id="subjectInputs" class="subject-grid">
             </div>
 
-        <button onclick="calculate()">立即計算換算結果</button>
 
-        <table id="resultTable" style="display:none;">
-            <thead>
-                <tr>
-                    <th>項目</th>
-                    <th>原始級分</th>
-                    <th>預估級分</th>
-                </tr>
-            </thead>
-            <tbody id="resultBody"></tbody>
-        </table>
+        <div style="display: flex; gap: 15px; margin-top: 20px;">
+            <button onclick="calculate()" style="flex: 1; background-color: #64748b;">
+                僅計算預覽
+            </button>
+            
+            <button onclick="exportPDF()" style="flex: 1; background-color: #10b981;">
+                📄 計算並匯出 PDF
+            </button>
+        </div>
+
+
+        <div class="table-container" style="overflow-x: auto; max-width: 100%; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.05);">
+            <table id="resultTable" style="display:none; white-space: nowrap;">
+                <thead id="resultHead"></thead>
+                <tbody id="resultBody"></tbody>
+            </table>
+        </div>
+
+
+
+
+    </div>
+    <div class="footer-note" style="margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 0.85rem; color: #64748b; line-height: 1.6;">
+    <p>※ 本工具數據來源為 <a href="https://www.ceec.edu.tw/xmdoc?xsmsid=0J018604485538810196" target="_blank" style="color: var(--primary-color); text-decoration: none; font-weight: 600;">大考中心 (CEEC)</a> 原始各科與組合級分人數累計表。</p>
+    <p>※ <strong>換算邏輯說明：</strong> 本系統採用「累積百分比對應法」。我們會將您在原始年份成績的<strong>累積百分位數（由高到低）</strong>，自動對應至目標年份最接近該百分位數之級分。若前後兩級分累積百分比相同，則會顯示較高的級分。</p>
     </div>
 </div>
 
@@ -86,25 +291,24 @@
         }
     }
 
-    // 2. 初始化 UI 元件
+    // Initializing User Interface
     function setupUI() {
         const years = Object.keys(gradeData);
         const sourceSelect = document.getElementById('sourceYear');
         const targetSelect = document.getElementById('targetYear');
         const subjectDiv = document.getElementById('subjectInputs');
 
-        // 填充年份 (預設選最後兩個年份)
+        // Filling year (Default: this year and last year)
         years.forEach((year) => {
             const opt = new Option(`民國 ${year} 年`, year);
             sourceSelect.add(opt.cloneNode(true));
             targetSelect.add(opt.cloneNode(true));
         });
         if(years.length >= 2) {
-            sourceSelect.selectedIndex = years.length - 2;
-            targetSelect.selectedIndex = years.length - 1;
+            sourceSelect.selectedIndex = years.length - 1;
+            targetSelect.selectedIndex = years.length - 2;
         }
 
-        // 固定只產生這六個科目的輸入框
         const targetSubjects = ['國文', '英文', '數學A', '數學B', '社會', '自然'];
         
         targetSubjects.forEach(sub => {
@@ -118,80 +322,101 @@
         });
     }
 
-// 支援真實組合級分對應的計算邏輯
     function calculate() {
         const sYear = document.getElementById('sourceYear').value;
-        const tYear = document.getElementById('targetYear').value;
-        const inputs = document.querySelectorAll('.score-input');
+        const tYearOption = document.getElementById('targetYear').value;
+        const resultHead = document.getElementById('resultHead');
         const resultBody = document.getElementById('resultBody');
-        
-        resultBody.innerHTML = '';
-        
-        const validSubjects = [];
-        const sourceScores = {};
+        const inputs = document.querySelectorAll('.score-input');
+
         const targetScores = {}; // 備案用
-        let hasValue = false;
-        let hasError = false;
 
-        // 處理單科換算
+
+        resultBody.innerHTML = '';
+        resultHead.innerHTML = '';
+
+        // 取得所有要比較的目標年份
+        const targetYears = tYearOption === 'all' 
+            ? Object.keys(gradeData).filter(year => year != sYear).sort((a, b) => b - a) // 降序排列
+            : [tYearOption];
+
+        // 1. 產生表頭
+        let headHTML = `<tr><th style="min-width:80px">科目</th><th style="min-width:80px">${sYear}年度</th>`;
+        targetYears.forEach(y => {
+            headHTML += `<th style="min-width:120px">${y}年度</th>`;
+        });
+        headHTML += `</tr>`;
+        resultHead.innerHTML = headHTML;
+
+        // 2. 準備科目資料 (僅限有填寫的)
+        const validSubs = [];
         inputs.forEach(input => {
-            const subject = input.getAttribute('data-subject');
             const score = parseInt(input.value);
-
-            if (!isNaN(score) && score >= 0 && score <= 15) {
-                hasValue = true;
-
-                if (!gradeData[sYear][subject] || !gradeData[tYear][subject]) {
-                    appendRow(subject, score, '無資料');
-                    hasError = true;
-                    return; 
-                }
-
-                const targetPct = gradeData[sYear][subject][15 - score];
-                // 傳入 15 作為單科的 maxScore
-                const closest = findClosest(gradeData[tYear][subject], targetPct, 15);
-                
-                validSubjects.push(subject);
-                sourceScores[subject] = score;
-                targetScores[subject] = closest.grade;
-
-                appendRow(subject, score, closest.grade);
-            }
+            if (!isNaN(score)) validSubs.push({ name: input.dataset.subject, score: score });
         });
 
-        // 處理組合級分真實換算
-        if (hasValue && !hasError) {
-            for (let size = 2; size <= 4; size++) {
-                if (validSubjects.length < size) continue;
+        // 3. 填入每一列 (科目或組合)
+        validSubs.forEach(item => {
+            let rowHTML = `<tr>
+                <td><strong>${item.name}</strong></td>
+                <td>${item.score} <small>(${gradeData[sYear][item.name][15-item.score]}%)</small></td>`;
+            
+            targetYears.forEach(y => {
+                const sPct = gradeData[sYear][item.name][15 - item.score];
+                const closest = findClosest(gradeData[y][item.name], sPct, 15);
+                targetScores[item.name] = closest.grade;
+                // 如果級分有變動，可以加個顏色標註 (例如變難則紅, 變易則綠)
+                const color = closest.grade > item.score ? '#10b981' : (closest.grade < item.score ? '#ef4444' : 'inherit');
+                
+                rowHTML += `<td>
+                    <span style="color:${color}; font-weight:bold">${closest.grade}</span>
+                    <div style="font-size:0.7rem; color:#94a3b8">${closest.value}%</div>
+                </td>`;
+            });
+            rowHTML += `</tr>`;
+            resultBody.innerHTML += rowHTML;
+        });
+        
 
-                const combos = getCombinations(validSubjects, size);
-                combos.forEach(combo => {
-                    let sSum = 0;
-                    combo.forEach(sub => sSum += sourceScores[sub]);
+        for (let size = 2; size <= 4; size++) {
+            if (validSubs.length < size) continue;
 
-                    // 動態組出 JSON 裡的 Key，例如 "國文+英文"
-                    const comboName = combo.join('、');
-                    const maxScore = size * 15; // 2科30, 3科45, 4科60
+            const combos = getCombinations(validSubs, size);
+            combos.forEach(combo => {
+                
+                let sSum = 0;
+                combo.forEach(sub => sSum += sub.score);
 
-                    // 如果你的 JSON 裡面有這個真實組合的數據
-                    if (gradeData[sYear][comboName] && gradeData[tYear][comboName]) {
-                        // 去陣列中抓取對應的真實百分比
-                        const targetPct = gradeData[sYear][comboName][maxScore - sSum];
-                        // 丟去目標年份比對
-                        const closest = findClosest(gradeData[tYear][comboName], targetPct, maxScore);
-                        appendRow(comboName, sSum, closest.grade, true);
-                    } else {
-                        // [防呆備案] 如果 JSON 剛好沒這組資料，用「單科相加」算給他看
-                        let tSum = 0;
-                        combo.forEach(sub => tSum += targetScores[sub]);
-                        appendRow(comboName, sSum, `${tSum} (單科相加)`, true);
-                    }
-                });
-            }
-            document.getElementById('resultTable').style.display = 'table';
-        } else if (!hasValue) {
-            alert('請至少輸入一科成績');
+                // 動態組出 JSON 裡的 Key，例如 "國文、英文"
+                const comboName = combo.map(item => item.name).join('、');
+                const maxScore = size * 15; // 2科30, 3科45, 4科60
+
+                // 去陣列中抓取對應的真實百分比
+                const targetPct = gradeData[sYear][comboName][maxScore - sSum];
+                let rowHTML = `<tr>
+                    <td><strong>${comboName}</strong></td>
+                    <td>${sSum} <small>(${targetPct}%)</small></td>`;
+
+                targetYears.forEach(y => {
+                    // 丟去目標年份比對
+                    const closest = findClosest(gradeData[y][comboName], targetPct, maxScore);
+                
+                    // 如果級分有變動，可以加個顏色標註 (例如變難則紅, 變易則綠)
+                    const color = closest.grade > sSum ? '#10b981' : (closest.grade < sSum ? '#ef4444' : 'inherit');
+                    
+                    rowHTML += `<td>
+                        <span style="color:${color}; font-weight:bold">${closest.grade}</span>
+                        <div style="font-size:0.7rem; color:#94a3b8">${closest.value}%</div>
+                    </td>`;
+                });    
+
+                rowHTML += `</tr>`;
+                resultBody.innerHTML += rowHTML;
+
+            });
         }
+
+        document.getElementById('resultTable').style.display = 'table';
     }
 
     function getCombinations(array, size) {
@@ -220,12 +445,30 @@
     }
 
 
-    function appendRow(label, s, t, isTotal = false) {
+    function appendRow(label, s, targetPct, t, isTotal = false) {
         const row = document.createElement('tr');
         if (isTotal) row.className = 'total-row';
-        row.innerHTML = `<td>${label}</td><td>${s}</td><td>${t}</td>`;
+        row.innerHTML = `<td>${label}</td><td>${s}<br>${targetPct}%</br></td><td>${t.grade}<br>${t.value}%</br></td>`;
         document.getElementById('resultBody').appendChild(row);
     }
+
+    // 新增：一鍵計算並匯出 PDF
+    function exportPDF() {
+        // 1. 強制先執行計算，確保表格是最新的
+        // 注意：這裡假設 calculate() 是同步執行的 (目前的寫法是同步的，所以沒問題)
+        calculate();
+
+        // 2. 給瀏覽器一點點時間 (500毫秒) 讓表格渲染完成
+        // 這樣可以避免「表格還沒畫出來，列印視窗就先跳出來」的白畫面問題
+        setTimeout(() => {
+            // 檢查表格是否有顯示 (代表計算成功)
+            const resultTable = document.getElementById('resultTable');
+            if (resultTable.style.display !== 'none') {
+                window.print();
+            }
+        }, 500);
+    }
+
 
     // 啟動
     init();
