@@ -49,7 +49,9 @@
         .table-container {
             width: 100%;
             overflow-x: auto;
+            overflow-y: auto;
             margin-top: 30px;
+            -webkit-overflow-scrolling: touch;
             border-radius: 8px;
             box-shadow: 0 0 10px rgba(0,0,0,0.05);
             border: 1px solid #e2e8f0;
@@ -66,7 +68,9 @@
         #resultTable th, #resultTable td { 
             padding: 12px; 
             text-align: center; 
-            border-bottom: 1px solid #e2e8f0; 
+            border-bottom: 1px solid #e2e8f0;
+            box-sizing: border-box;
+            background-clip: padding-box;
         }
 
         #resultTable th { 
@@ -76,22 +80,24 @@
 
         /* 凍結第 1 欄：科目 */
         #resultTable th:nth-child(1), #resultTable td:nth-child(1) {
+            position: -webskit-sticky;
             position: sticky;
             left: 0;
             z-index: 10;
             background-color: #f8fafc;
             
-            width: 160px;
-            min-width: 160px;
-            max-width: 160px;
+            width: 190px;
+            min-width: 190px;
+            max-width: 190px;
             white-space: normal;
-            word-break: keep-all;
+            word-break: break-all;
         }
 
         /* 凍結第 2 欄：原始成績 */
         #resultTable th:nth-child(2), #resultTable td:nth-child(2) {
+            position: -webskit-sticky;
             position: sticky;
-            left: 160px; /* 配合第一欄的寬度 */
+            left: 190px; /* 配合第一欄的寬度 */
             z-index: 10;
             background-color: #f8fafc;
             border-right: 3px solid #cbd5e1; /* 加上陰影分隔線增加立體感 */
@@ -104,6 +110,7 @@
 
         /* 1. 讓整排表頭固定在最上方 */
         #resultTable thead th {
+            position: -webkit-sticky;
             position: sticky;
             top: 0; /* 貼齊頂部 */
             z-index: 15; /* 層級必須高於會滑動的 tbody 資料列 */
@@ -114,6 +121,7 @@
         /* 2. 左上角交叉點：同時具備 上下固定 + 左右固定，所以層級必須最高 */
         /* 科目表頭 */
         #resultTable thead th:nth-child(1) {
+            position: -webskit-sticky;
             position: sticky;
             top: 0;
             left: 0;
@@ -123,6 +131,7 @@
 
         /* 我的成績表頭 */
         #resultTable thead th:nth-child(2) {
+            position: -webskit-sticky;
             position: sticky;
             top: 0;
             left: 160px; /* 這裡記得要對齊下面 tbody 的寬度設定 */
@@ -148,14 +157,14 @@
                 display: none !important; 
             }
             
-            /* 2. 核心解法：強制把列印時的畫布撐開到電腦版寬度 (約 A4 橫式解析度) */
-            /* 這樣手機瀏覽器就會被迫將整個大表格「縮小塞進」同一頁 PDF 中 */
             html, body {
-                width: 1100px !important;
+                width: 1080px !important;
                 min-width: 1100px !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 background: white !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
             }
             
             /* 3. 重設容器，讓它跟著 body 撐滿 */
@@ -175,13 +184,19 @@
                 max-height: none !important;
                 border: none !important;
                 margin-top: 0 !important;
+                display: block !important;
             }
             
             /* 5. 表格本體優化：解除凍結、加上實體黑線、禁止文字換行 */
             #resultTable {
+                display: table !important; /* 強制回歸表格模式，thead 才會在每頁重複 */
                 width: 100% !important;
                 border-collapse: collapse !important; /* 列印時改回 collapse 讓框線更完美 */
             }
+
+            thead {
+                    display: table-header-group !important;
+                }
 
             #resultTable th, #resultTable td { 
                 position: static !important; /* 解除左右與上下的 sticky 凍結 */
@@ -212,7 +227,7 @@
             /* 7. 告訴印表機我們想要橫向 A4 */
             @page { 
                 size: A4 landscape; 
-                margin: 10mm; /* 留一點紙張白邊 */
+                margin: 5mm; /* 留一點紙張白邊 */
             }
         }
 
@@ -249,7 +264,7 @@
                 僅計算預覽
             </button>
             
-            <button onclick="exportPDF()" style="flex: 1; background-color: #10b981;">
+            <button onclick="exportPDF()" style="flex: 1; background-color: #059669;">
                 📄 計算並匯出 PDF
             </button>
         </div>
@@ -268,7 +283,7 @@
     </div>
     <div class="footer-note" style="margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 20px; font-size: 0.85rem; color: #64748b; line-height: 1.6;">
     <p>※ 本工具數據來源為 <a href="https://www.ceec.edu.tw/xmdoc?xsmsid=0J018604485538810196" target="_blank" style="color: var(--primary-color); text-decoration: none; font-weight: 600;">大考中心 (CEEC)</a> 原始各科與組合級分人數累計表。</p>
-    <p>※ <strong>換算邏輯說明：</strong> 本系統採用「累積百分比對應法」。我們會將您在原始年份成績的<strong>累積百分位數（由高到低）</strong>，自動對應至目標年份最接近該百分位數之級分。若前後兩級分累積百分比相同，則會顯示較高的級分。</p>
+    <p>※ <strong>換算邏輯說明：</strong> 本系統採用「累積百分比對應法」。我們會將您在原始年份成績的<strong>累積百分位數（由高到低）</strong>，自動對應至目標年份最接近該百分位數之級分。換算若遇比例差距相同，均採『高分優先』原則顯示。</p>
     </div>
 </div>
 
@@ -306,7 +321,7 @@
         });
         if(years.length >= 2) {
             sourceSelect.selectedIndex = years.length - 1;
-            targetSelect.selectedIndex = years.length - 2;
+            targetSelect.selectedIndex = 0
         }
 
         const targetSubjects = ['國文', '英文', '數學A', '數學B', '社會', '自然'];
@@ -366,11 +381,11 @@
                 const closest = findClosest(gradeData[y][item.name], sPct, 15);
                 targetScores[item.name] = closest.grade;
                 // 如果級分有變動，可以加個顏色標註 (例如變難則紅, 變易則綠)
-                const color = closest.grade > item.score ? '#10b981' : (closest.grade < item.score ? '#ef4444' : 'inherit');
+                const color = closest.grade > item.score ? '#059669' : (closest.grade < item.score ? '#ef4444' : 'inherit');
                 
                 rowHTML += `<td>
                     <span style="color:${color}; font-weight:bold">${closest.grade}</span>
-                    <div style="font-size:0.7rem; color:#94a3b8">${closest.value}%</div>
+                    <div style="font-size:0.7rem; color:#475569">${closest.value}%</div>
                 </td>`;
             });
             rowHTML += `</tr>`;
@@ -402,11 +417,11 @@
                     const closest = findClosest(gradeData[y][comboName], targetPct, maxScore);
                 
                     // 如果級分有變動，可以加個顏色標註 (例如變難則紅, 變易則綠)
-                    const color = closest.grade > sSum ? '#10b981' : (closest.grade < sSum ? '#ef4444' : 'inherit');
+                    const color = closest.grade > sSum ? '#059669' : (closest.grade < sSum ? '#ef4444' : 'inherit');
                     
                     rowHTML += `<td>
                         <span style="color:${color}; font-weight:bold">${closest.grade}</span>
-                        <div style="font-size:0.7rem; color:#94a3b8">${closest.value}%</div>
+                        <div style="font-size:0.7rem; color:#475569">${closest.value}%</div>
                     </td>`;
                 });    
 
@@ -457,6 +472,9 @@
         // 1. 強制先執行計算，確保表格是最新的
         // 注意：這裡假設 calculate() 是同步執行的 (目前的寫法是同步的，所以沒問題)
         calculate();
+
+        alert("1. 進入列印畫面後，請確認「方向」選擇為【橫向】。\n2. 「印表機」請選擇【儲存為 PDF】。");
+    
 
         // 2. 給瀏覽器一點點時間 (500毫秒) 讓表格渲染完成
         // 這樣可以避免「表格還沒畫出來，列印視窗就先跳出來」的白畫面問題
