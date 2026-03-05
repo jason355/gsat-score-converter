@@ -3,6 +3,11 @@
 
 一個基於大考中心 (CEEC) 原始數據，利用累積百分位數進行換算的工具。特別優化了多考科組合與跨年度矩陣對照功能。
 
+<div style="text-align: center;">
+    <a href="https://jason355.github.io/gsat-score-converter/" target="_blank">
+    <img src="https://img.shields.io/badge/馬上試試-2563eb?style=for-the-badge&color=blue" alt="GitHub Pages">
+    </a>
+</div>
 
 
 ## 功能 
